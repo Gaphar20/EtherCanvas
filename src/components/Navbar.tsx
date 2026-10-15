@@ -3,6 +3,7 @@ import {
   Wallet,
   Sparkles,
   Search,
+  Compass,
   Layers,
   Activity,
   AlertTriangle,
@@ -13,13 +14,17 @@ import {
   Menu,
   X,
   ExternalLink,
+  Loader2,
+  Plus,
 } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
 import { useChainlinkPrice } from "@/hooks/useChainlinkPrice";
 
+export type NavTab = "explore" | "create" | "my_nfts" | "ens" | "oracle";
+
 interface NavbarProps {
-  activeTab: "studio" | "gallery" | "ens" | "oracle";
-  setActiveTab: (tab: "studio" | "gallery" | "ens" | "oracle") => void;
+  activeTab: NavTab;
+  setActiveTab: (tab: NavTab) => void;
   onOpenSettings: () => void;
   contractAddress: string;
 }
@@ -37,9 +42,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     ensName,
     ensAvatar,
     isConnecting,
+    error: walletError,
+    hasProvider,
     connectWallet,
     disconnectWallet,
     switchToSepolia,
+    clearError,
   } = useWallet();
 
   const { formattedPrice, isStale, loading: priceLoading } = useChainlinkPrice();
@@ -59,38 +67,43 @@ export const Navbar: React.FC<NavbarProps> = ({
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   };
 
-  const navItems = [
-    { id: "studio", label: "NFT Studio", icon: Sparkles },
-    { id: "gallery", label: "On-Chain Gallery", icon: Layers },
-    { id: "ens", label: "ENS Search", icon: Search },
-    { id: "oracle", label: "ETH/USD Oracle", icon: Activity },
-  ] as const;
+  const navItems: { id: NavTab; label: string; icon: React.ElementType }[] = [
+    { id: "explore", label: "Explore", icon: Compass },
+    { id: "create", label: "Create", icon: Plus },
+    { id: "my_nfts", label: "My NFTs", icon: Layers },
+    { id: "ens", label: "ENS Lookup", icon: Search },
+  ];
 
   return (
-    <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-canvas-950/80 border-b border-violet-900/30">
+    <header className="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-[#EAEAEA]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab("studio")}>
-            <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-tr from-violet-700 via-violet-600 to-indigo-600 shadow-lg shadow-violet-900/40 p-2 border border-violet-400/30">
-              <Sparkles className="w-6 h-6 text-white animate-pulse" />
-              <div className="absolute -inset-1 rounded-xl bg-violet-500/20 blur-sm -z-10" />
+          {/* Brand Logo */}
+          <div
+            className="flex items-center gap-3 cursor-pointer group"
+            onClick={() => setActiveTab("explore")}
+          >
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-2xl bg-[#171717] group-hover:bg-[#262626] transition-colors shadow-sm p-2">
+              <Sparkles className="w-5 h-5 text-white" />
+              <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#E84B55] border-2 border-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xl font-bold tracking-tight text-white font-sans">
-                  Ether<span className="text-violet-400 font-extrabold">Canvas</span>
+                <span className="text-xl font-bold tracking-tight text-[#171717] font-sans">
+                  Ether<span className="text-[#E84B55]">Canvas</span>
                 </span>
-                <span className="px-1.5 py-0.5 text-[10px] uppercase font-mono font-semibold tracking-wider rounded bg-violet-950/80 text-violet-300 border border-violet-700/50">
+                <span className="px-2 py-0.5 text-[10px] font-mono font-medium rounded-full bg-[#FAFAF8] text-[#737373] border border-[#EAEAEA]">
                   Sepolia
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Next-Gen Web3 NFT Studio</p>
+              <p className="text-[11px] text-[#737373] hidden sm:block font-medium">
+                Minimalist Web3 NFT Studio
+              </p>
             </div>
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1 bg-canvas-900/60 p-1.5 rounded-2xl border border-violet-900/40">
+          {/* Desktop Navigation Links */}
+          <nav className="hidden md:flex items-center gap-1.5 bg-[#FAFAF8] p-1.5 rounded-full border border-[#EAEAEA]">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -98,13 +111,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                     isActive
-                      ? "bg-violet-600 text-white shadow-md shadow-violet-700/30 font-semibold"
-                      : "text-slate-300 hover:text-white hover:bg-violet-950/40"
+                      ? "bg-[#171717] text-white shadow-sm"
+                      : "text-[#737373] hover:text-[#171717] hover:bg-[#F4F4F0]"
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-violet-400"}`} />
+                  <Icon
+                    className={`w-3.5 h-3.5 ${
+                      isActive ? "text-white" : item.id === "create" ? "text-[#E84B55]" : "text-[#737373]"
+                    }`}
+                  />
                   {item.label}
                 </button>
               );
@@ -113,31 +130,29 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Bar */}
           <div className="hidden lg:flex items-center gap-3">
-            {/* Chainlink Mini Pill */}
-            <div
+            {/* Live ETH/USD Pill */}
+            <button
               onClick={() => setActiveTab("oracle")}
               title="Chainlink ETH/USD Live Feed (Sepolia)"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-canvas-900/70 border border-violet-800/40 hover:border-violet-500/60 cursor-pointer transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FAFAF8] border border-[#EAEAEA] hover:border-[#D4D4D4] text-[#171717] transition-all shadow-sm"
             >
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <div className="text-xs font-mono">
-                <span className="text-slate-400">ETH: </span>
-                <span className="text-emerald-400 font-semibold">
-                  {priceLoading ? "..." : formattedPrice}
-                </span>
+                <span className="text-[#737373]">ETH: </span>
+                <span className="font-semibold">{priceLoading ? "..." : formattedPrice}</span>
               </div>
               {isStale && (
                 <span title="Data may be stale">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                 </span>
               )}
-            </div>
+            </button>
 
-            {/* Contract Config Button */}
+            {/* Contract Settings */}
             <button
               onClick={onOpenSettings}
-              className="p-2 rounded-xl bg-canvas-900/70 border border-violet-900/40 hover:border-violet-600/50 text-slate-300 hover:text-violet-300 transition-colors"
-              title="Contract Settings & ABI"
+              className="p-2.5 rounded-full bg-[#FAFAF8] border border-[#EAEAEA] hover:border-[#D4D4D4] text-[#737373] hover:text-[#171717] transition-all shadow-sm"
+              title="Contract Settings & Parameters"
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -145,43 +160,53 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Wallet Action Button */}
             {!address ? (
               <button
+                type="button"
                 onClick={connectWallet}
                 disabled={isConnecting}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium text-sm shadow-lg shadow-violet-900/30 hover:shadow-violet-700/50 transition-all border border-violet-400/30 active:scale-95 disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#171717] hover:bg-[#262626] text-white font-medium text-xs sm:text-sm shadow-sm hover:shadow transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Wallet className="w-4 h-4" />
-                {isConnecting ? "Connecting..." : "Connect MetaMask"}
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="w-4 h-4" />
+                    <span>Connect MetaMask</span>
+                  </>
+                )}
               </button>
             ) : !isSepolia ? (
               <button
                 onClick={switchToSepolia}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 text-sm font-semibold transition-all animate-pulse"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-800 text-xs sm:text-sm font-semibold transition-all animate-pulse"
               >
-                <AlertTriangle className="w-4 h-4" />
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
                 Switch to Sepolia
               </button>
             ) : (
               <div className="relative">
                 <button
                   onClick={() => setUserDropdown(!userDropdown)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-canvas-900/80 border border-violet-500/30 hover:border-violet-400 text-slate-200 transition-all"
+                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white border border-[#EAEAEA] hover:border-[#D4D4D4] text-[#171717] shadow-sm transition-all"
                 >
                   {ensAvatar ? (
                     <img
                       src={ensAvatar}
                       alt="ENS Avatar"
-                      className="w-7 h-7 rounded-lg object-cover border border-violet-500/50"
+                      className="w-7 h-7 rounded-full object-cover border border-[#EAEAEA]"
                     />
                   ) : (
-                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-xs font-bold text-white shadow-inner">
+                    <div className="w-7 h-7 rounded-full bg-[#FAFAF8] border border-[#EAEAEA] flex items-center justify-center text-xs font-semibold text-[#171717]">
                       {address.substring(2, 4).toUpperCase()}
                     </div>
                   )}
                   <div className="text-left font-mono">
-                    <div className="text-xs font-semibold text-white leading-tight">
+                    <div className="text-xs font-semibold text-[#171717] leading-tight">
                       {ensName || truncateAddress(address)}
                     </div>
-                    <div className="text-[10px] text-violet-400">
+                    <div className="text-[10px] text-[#737373]">
                       {parseFloat(balance).toFixed(3)} SEP
                     </div>
                   </div>
@@ -189,24 +214,25 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 {/* User Dropdown */}
                 {userDropdown && (
-                  <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-canvas-900/95 backdrop-blur-2xl border border-violet-800/50 shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
-                    <div className="pb-3 border-b border-violet-900/40">
-                      <div className="text-xs text-slate-400 mb-1">Connected Account</div>
-                      <div className="text-sm font-mono text-white font-semibold flex items-center justify-between">
+                  <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-[#EAEAEA] shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
+                    <div className="pb-3 border-b border-[#EAEAEA]">
+                      <div className="text-xs text-[#737373] mb-1 font-medium">Connected Account</div>
+                      <div className="text-xs font-mono text-[#171717] font-semibold flex items-center justify-between">
                         <span>{truncateAddress(address)}</span>
                         <button
                           onClick={copyAddress}
-                          className="p-1 rounded-md hover:bg-violet-950/60 text-slate-400 hover:text-white"
+                          className="p-1.5 rounded-md hover:bg-[#FAFAF8] text-[#737373] hover:text-[#171717]"
+                          title="Copy address"
                         >
                           {copied ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           ) : (
                             <Copy className="w-3.5 h-3.5" />
                           )}
                         </button>
                       </div>
                       {ensName && (
-                        <div className="text-xs text-violet-400 font-medium mt-0.5">{ensName}</div>
+                        <div className="text-xs text-[#E84B55] font-medium mt-1">{ensName}</div>
                       )}
                     </div>
 
@@ -215,20 +241,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                         href={`https://sepolia.etherscan.io/address/${address}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-violet-950/50 hover:text-white transition-colors"
+                        className="flex items-center justify-between px-2.5 py-2 rounded-xl text-xs text-[#737373] hover:bg-[#FAFAF8] hover:text-[#171717] transition-colors"
                       >
-                        <span>View on Sepolia Etherscan</span>
-                        <ExternalLink className="w-3 h-3 text-slate-500" />
+                        <span>Sepolia Etherscan</span>
+                        <ExternalLink className="w-3.5 h-3.5 text-[#A3A3A3]" />
                       </a>
                     </div>
 
-                    <div className="pt-2 border-t border-violet-900/40">
+                    <div className="pt-2 border-t border-[#EAEAEA]">
                       <button
                         onClick={() => {
                           disconnectWallet();
                           setUserDropdown(false);
                         }}
-                        className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs text-rose-400 hover:bg-rose-950/30 transition-colors"
+                        className="flex items-center gap-2 w-full px-2.5 py-2 rounded-xl text-xs text-rose-600 hover:bg-rose-50 transition-colors font-medium"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         Disconnect Wallet
@@ -244,7 +270,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex md:hidden items-center gap-2">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl bg-canvas-900 border border-violet-900/50 text-slate-300 hover:text-white"
+              className="p-2 rounded-xl bg-[#FAFAF8] border border-[#EAEAEA] text-[#171717]"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -254,7 +280,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-violet-900/40 bg-canvas-950/95 backdrop-blur-2xl px-4 pt-3 pb-6 space-y-3">
+        <div className="md:hidden border-t border-[#EAEAEA] bg-white px-4 pt-4 pb-6 space-y-3 shadow-lg">
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -266,64 +292,112 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setActiveTab(item.id);
                     setMobileMenuOpen(false);
                   }}
-                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium ${
+                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-2xl text-sm font-medium ${
                     isActive
-                      ? "bg-violet-600 text-white font-semibold"
-                      : "text-slate-300 hover:bg-violet-950/40"
+                      ? "bg-[#171717] text-white font-semibold"
+                      : "text-[#737373] hover:bg-[#FAFAF8]"
                   }`}
                 >
-                  <Icon className="w-4 h-4 text-violet-400" />
+                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-[#737373]"}`} />
                   {item.label}
                 </button>
               );
             })}
           </nav>
 
-          <div className="pt-3 border-t border-violet-900/40 space-y-3">
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-canvas-900 border border-violet-900/50">
-              <span className="text-xs text-slate-400">ETH/USD (Sepolia):</span>
-              <span className="text-xs font-mono font-semibold text-emerald-400">
+          <div className="pt-3 border-t border-[#EAEAEA] space-y-3">
+            <div
+              onClick={() => {
+                setActiveTab("oracle");
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center justify-between px-4 py-2.5 rounded-2xl bg-[#FAFAF8] border border-[#EAEAEA] cursor-pointer"
+            >
+              <span className="text-xs text-[#737373]">ETH/USD (Sepolia):</span>
+              <span className="text-xs font-mono font-semibold text-[#171717]">
                 {priceLoading ? "..." : formattedPrice}
               </span>
             </div>
 
             {!address ? (
               <button
+                type="button"
                 onClick={() => {
                   connectWallet();
                   setMobileMenuOpen(false);
                 }}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-violet-600 text-white font-medium text-sm shadow-lg shadow-violet-900/30"
+                disabled={isConnecting}
+                className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-[#171717] text-white font-medium text-sm shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Wallet className="w-4 h-4" />
-                Connect MetaMask
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="w-4 h-4" />
+                    <span>Connect MetaMask</span>
+                  </>
+                )}
               </button>
             ) : !isSepolia ? (
               <button
                 onClick={switchToSepolia}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-amber-500/20 text-amber-300 font-semibold text-sm border border-amber-500/40"
+                className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-amber-50 text-amber-800 font-semibold text-sm border border-amber-200"
               >
                 <AlertTriangle className="w-4 h-4" />
                 Switch to Sepolia
               </button>
             ) : (
-              <div className="p-3 rounded-xl bg-canvas-900 border border-violet-800/40 space-y-2">
+              <div className="p-3.5 rounded-2xl bg-[#FAFAF8] border border-[#EAEAEA] space-y-2">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400">Account:</span>
-                  <span className="text-white font-semibold">{truncateAddress(address)}</span>
+                  <span className="text-[#737373]">Account:</span>
+                  <span className="text-[#171717] font-semibold">{truncateAddress(address)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400">Balance:</span>
-                  <span className="text-violet-400">{parseFloat(balance).toFixed(4)} SEP</span>
+                  <span className="text-[#737373]">Balance:</span>
+                  <span className="text-[#E84B55] font-semibold">{parseFloat(balance).toFixed(4)} SEP</span>
                 </div>
                 <button
                   onClick={disconnectWallet}
-                  className="w-full mt-2 py-2 rounded-lg bg-rose-950/40 text-rose-300 text-xs font-medium border border-rose-900/40"
+                  className="w-full mt-2 py-2 rounded-xl bg-rose-50 text-rose-600 text-xs font-medium border border-rose-100"
                 >
                   Disconnect Wallet
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Wallet Error Banner */}
+      {walletError && (
+        <div className="bg-[#FFF5F5] border-t border-[#FEE2E2] text-[#B91C1C] px-4 py-2.5 text-xs animate-in fade-in">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <AlertTriangle className="w-4 h-4 text-[#E84B55] flex-shrink-0" />
+              <span>{walletError}</span>
+              {!hasProvider && (
+                <a
+                  href="https://metamask.io/download/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-semibold text-[#B91C1C] hover:underline ml-1"
+                >
+                  Install MetaMask
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={clearError}
+              className="text-[#E84B55] hover:text-[#B91C1C] text-sm font-bold px-2 py-0.5 rounded hover:bg-[#FEE2E2] transition-colors flex-shrink-0"
+              title="Dismiss error"
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}

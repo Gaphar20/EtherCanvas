@@ -61,9 +61,55 @@ export const CHAINLINK_AGGREGATOR_V3_ABI = [
   },
 ] as const;
 
+import { ethers } from "ethers";
+import deployedAddressData from "./deployedAddress.json";
+import EtherCanvasNFTArtifact from "./EtherCanvasNFT.json";
+
+// Contract ABI export
+export const ETHERCANVAS_NFT_ABI = EtherCanvasNFTArtifact.abi;
+
+/**
+ * Resolves the default deployed EtherCanvasNFT contract address.
+ * Priority:
+ * 1. Environment variable VITE_NFT_CONTRACT_ADDRESS (if set and valid Ethereum address)
+ * 2. deployedAddress.json (if present, on Sepolia chainId 11155111, and valid Ethereum address)
+ * Requirement: Do not silently fall back to local Hardhat addresses on Sepolia.
+ */
+export function resolveDefaultNftContractAddress(): string {
+  // 1. Check environment variable VITE_NFT_CONTRACT_ADDRESS
+  const envAddr = import.meta.env.VITE_NFT_CONTRACT_ADDRESS;
+  if (envAddr && typeof envAddr === "string" && ethers.isAddress(envAddr.trim())) {
+    return envAddr.trim();
+  }
+
+  // 2. Check deployedAddress.json as fallback
+  if (deployedAddressData && typeof deployedAddressData === "object") {
+    const data = deployedAddressData as {
+      network?: string;
+      chainId?: string | number;
+      address?: string;
+    };
+
+    const isSepolia =
+      String(data.chainId) === "11155111" ||
+      String(data.network).toLowerCase() === "sepolia";
+
+    // Strictly ensure we do NOT fall back to local Hardhat addresses on Sepolia
+    const isLocal =
+      String(data.chainId) === "31337" ||
+      String(data.network).toLowerCase() === "localhost" ||
+      String(data.network).toLowerCase() === "hardhat";
+
+    if (isSepolia && !isLocal && data.address && ethers.isAddress(data.address.trim())) {
+      return data.address.trim();
+    }
+  }
+
+  return "";
+}
+
 // Default contract address from env or deployed address
-export const DEFAULT_NFT_CONTRACT_ADDRESS =
-  import.meta.env.VITE_NFT_CONTRACT_ADDRESS || "";
+export const DEFAULT_NFT_CONTRACT_ADDRESS = resolveDefaultNftContractAddress();
 
 // Public Ethereum Mainnet RPCs for ENS resolution (works without wallet connection)
 export const MAINNET_RPC_URLS = [

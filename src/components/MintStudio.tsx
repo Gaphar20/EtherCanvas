@@ -16,6 +16,8 @@ import {
   ShieldCheck,
   RefreshCw,
   Coins,
+  AlertTriangle,
+  Layers,
 } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
 import EtherCanvasNFTArtifact from "@/contracts/EtherCanvasNFT.json";
@@ -33,7 +35,17 @@ export const MintStudio: React.FC<MintStudioProps> = ({
   onMintSuccess,
   onOpenSettings,
 }) => {
-  const { address, isSepolia, signer, connectWallet, switchToSepolia } = useWallet();
+  const {
+    address,
+    isSepolia,
+    signer,
+    connectWallet,
+    switchToSepolia,
+    isConnecting,
+    error: walletError,
+    hasProvider,
+    clearError: clearWalletError,
+  } = useWallet();
 
   // Form states
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -43,7 +55,7 @@ export const MintStudio: React.FC<MintStudioProps> = ({
   const [recipient, setRecipient] = useState<string>("");
   const [attributes, setAttributes] = useState<TraitAttribute[]>([
     { trait_type: "Studio", value: "EtherCanvas" },
-    { trait_type: "Edition", value: "Genesis" },
+    { trait_type: "Edition", value: "Minimalist" },
   ]);
 
   // Minting progression states
@@ -66,37 +78,33 @@ export const MintStudio: React.FC<MintStudioProps> = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Gradient background
+    // Clean aesthetic warm/neutral or vibrant generative background
     const bgGrad = ctx.createLinearGradient(0, 0, 600, 600);
-    const hues = [260, 280, 240, 310, 200];
+    const hues = [350, 10, 220, 260, 45];
     const pickHue = hues[Math.floor(Math.random() * hues.length)];
-    bgGrad.addColorStop(0, `hsl(${pickHue}, 80%, 10%)`);
-    bgGrad.addColorStop(0.5, `hsl(${pickHue + 40}, 85%, 20%)`);
-    bgGrad.addColorStop(1, `hsl(${pickHue - 30}, 90%, 8%)`);
+    bgGrad.addColorStop(0, `hsl(${pickHue}, 85%, 96%)`);
+    bgGrad.addColorStop(0.5, `hsl(${pickHue + 25}, 80%, 92%)`);
+    bgGrad.addColorStop(1, `hsl(${pickHue - 20}, 75%, 88%)`);
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 600, 600);
 
-    // Glowing Neon Rings & Celestial Geometry
-    for (let i = 0; i < 18; i++) {
+    // Minimalist geometric forms & celestial curves
+    for (let i = 0; i < 16; i++) {
       ctx.save();
       ctx.translate(300, 300);
-      ctx.rotate((Math.PI / 9) * i);
+      ctx.rotate((Math.PI / 8) * i);
       ctx.beginPath();
-      ctx.arc(0, 0, 40 + i * 14, 0, Math.PI * 1.5);
-      ctx.strokeStyle = `hsla(${pickHue + i * 8}, 95%, 70%, 0.45)`;
-      ctx.lineWidth = 2 + Math.random() * 4;
-      ctx.shadowColor = `hsl(${pickHue + i * 8}, 100%, 75%)`;
-      ctx.shadowBlur = 18;
+      ctx.arc(0, 0, 50 + i * 14, 0, Math.PI * 1.4);
+      ctx.strokeStyle = `hsla(${pickHue + i * 5}, 70%, 50%, 0.4)`;
+      ctx.lineWidth = 2 + Math.random() * 3;
       ctx.stroke();
       ctx.restore();
     }
 
-    // Inner Radiant Star
+    // Modern central accent circle
     ctx.beginPath();
-    ctx.arc(300, 300, 45, 0, Math.PI * 2);
-    ctx.fillStyle = `hsl(${pickHue + 50}, 100%, 85%)`;
-    ctx.shadowColor = "#ffffff";
-    ctx.shadowBlur = 30;
+    ctx.arc(300, 300, 50, 0, Math.PI * 2);
+    ctx.fillStyle = `hsl(${pickHue}, 80%, 60%)`;
     ctx.fill();
 
     const dataUrl = canvas.toDataURL("image/png");
@@ -107,29 +115,27 @@ export const MintStudio: React.FC<MintStudioProps> = ({
     if (!name) setName(`EtherCanvas #${randomEdition}`);
     if (!description) {
       setDescription(
-        "A generative on-chain composition crafted with luminous violet geometry and decentralized permanence."
+        "A minimalist algorithmic generative piece created in EtherCanvas Studio, pinned immutably to decentralized IPFS."
       );
     }
   };
 
-  // Handle image file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        alert("File size exceeds 5MB limit. Please select a smaller image.");
+        setErrorMessage("Image file size must be less than 5MB.");
         return;
       }
       setImageFile(file);
       const reader = new FileReader();
-      reader.onload = () => {
-        setImagePreview(reader.result as string);
+      reader.onload = (uploadEvent) => {
+        setImagePreview(uploadEvent.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Trait management
   const addTrait = () => {
     setAttributes([...attributes, { trait_type: "", value: "" }]);
   };
@@ -144,98 +150,100 @@ export const MintStudio: React.FC<MintStudioProps> = ({
     setAttributes(attributes.filter((_, i) => i !== index));
   };
 
-  // Handle Full Mint Flow
   const handleMint = async () => {
-    if (!address) {
-      connectWallet();
+    if (!signer || !address) {
+      await connectWallet();
       return;
     }
 
     if (!isSepolia) {
-      switchToSepolia();
+      await switchToSepolia();
       return;
     }
 
-    if (!contractAddress) {
-      setErrorMessage("No EtherCanvasNFT contract address configured. Please set one in settings.");
+    if (!contractAddress || !ethers.isAddress(contractAddress)) {
+      setErrorMessage("Please set a valid deployed EtherCanvasNFT contract address first.");
+      onOpenSettings();
       return;
     }
 
-    if (!imagePreview) {
-      setErrorMessage("Please select or generate artwork for your NFT.");
+    if (!imagePreview && !imageFile) {
+      setErrorMessage("Please upload an artwork image or click 'Procedural Art' to generate one.");
       return;
     }
 
     if (!name.trim()) {
-      setErrorMessage("Please enter a name for your NFT artwork.");
+      setErrorMessage("Artwork Title is required.");
+      return;
+    }
+
+    const mintTarget = recipient.trim() || address;
+    if (!ethers.isAddress(mintTarget)) {
+      setErrorMessage("Recipient address is not a valid Ethereum address.");
       return;
     }
 
     setErrorMessage(null);
     setStatus("uploading_ipfs");
-    setStatusMessage("Uploading artwork and pinning ERC-721 metadata to Pinata IPFS...");
+    setStatusMessage("Uploading artwork and metadata to decentralized IPFS via Pinata...");
 
     try {
-      // 1. Secure Server-Side Upload
-      // Sends base64 data to /api/upload. PINATA_JWT is NEVER exposed to the browser.
+      // 1. Upload to IPFS via Serverless Pinata API
+      const formData = new FormData();
+      if (imageFile) {
+        formData.append("file", imageFile);
+      } else if (imagePreview) {
+        // Convert data URL to Blob
+        const response = await fetch(imagePreview);
+        const blob = await response.blob();
+        formData.append("file", blob, "artwork.png");
+      }
+
+      formData.append("name", name);
+      formData.append("description", description);
+      formData.append("attributes", JSON.stringify(attributes.filter((a) => a.trait_type && a.value)));
+
       const uploadRes = await fetch("/api/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: imagePreview,
-          fileName: imageFile?.name || "ethercanvas-art.png",
-          name: name.trim(),
-          description: description.trim(),
-          attributes: attributes.filter((a) => a.trait_type.trim() && a.value),
-        }),
+        body: formData,
       });
 
-      const uploadData = await uploadRes.json();
-
       if (!uploadRes.ok) {
-        throw new Error(uploadData.error || uploadData.details || "IPFS upload failed.");
+        const errorData = await uploadRes.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || `IPFS upload failed with HTTP status ${uploadRes.status}`
+        );
       }
 
-      const returnedMetadataUri = uploadData.metadataUri;
-      setMetadataIpfsUri(returnedMetadataUri);
+      const uploadResult = await uploadRes.json();
+      const ipfsMetadataUri = uploadResult.metadataUri;
+      setMetadataIpfsUri(ipfsMetadataUri);
 
-      // 2. MetaMask On-Chain Minting
+      // 2. Prepare Contract Mint Transaction
       setStatus("awaiting_wallet");
-      setStatusMessage("Sign transaction in MetaMask to mint your NFT on Sepolia...");
+      setStatusMessage("Please confirm the mint transaction in your MetaMask wallet...");
 
-      if (!signer) {
-        throw new Error("Wallet signer not available. Please reconnect MetaMask.");
-      }
-
-      const nftContract = new ethers.Contract(
+      const contract = new ethers.Contract(
         contractAddress,
         EtherCanvasNFTArtifact.abi,
         signer
       );
 
-      const targetTo = (recipient.trim() || address).trim();
-
-      if (!ethers.isAddress(targetTo)) {
-        throw new Error(`Invalid recipient address: "${targetTo}"`);
-      }
-
-      const tx = await nftContract.mint(targetTo, returnedMetadataUri);
+      // Call mintNFT(recipient, tokenURI)
+      const tx = await contract.mintNFT(mintTarget, ipfsMetadataUri);
       setTxHash(tx.hash);
 
       setStatus("confirming_tx");
-      setStatusMessage("Waiting for Ethereum Sepolia block confirmation...");
+      setStatusMessage(`Transaction submitted: ${tx.hash.substring(0, 10)}... Mining on Sepolia...`);
 
-      const receipt = await tx.wait();
+      const receipt = await tx.wait(1);
 
-      // Find Minted event in receipt
-      let tokenId = 1;
-      if (receipt.logs) {
+      // 3. Extract Token ID from Minted Event
+      let tokenId = 0;
+      if (receipt && receipt.logs) {
         for (const log of receipt.logs) {
           try {
-            const parsed = nftContract.interface.parseLog({
-              topics: [...log.topics],
-              data: log.data,
-            });
+            const parsed = contract.interface.parseLog(log);
             if (parsed && parsed.name === "Minted") {
               tokenId = Number(parsed.args.tokenId);
               break;
@@ -250,12 +258,12 @@ export const MintStudio: React.FC<MintStudioProps> = ({
       setStatus("success");
       setStatusMessage(`NFT Successfully Minted! Token ID: #${tokenId}`);
 
-      // Fire celebratory confetti!
+      // Celebratory Confetti
       confetti({
-        particleCount: 120,
-        spread: 80,
+        particleCount: 100,
+        spread: 70,
         origin: { y: 0.6 },
-        colors: ["#8b5cf6", "#a855f7", "#ec4899", "#38bdf8", "#ffffff"],
+        colors: ["#E84B55", "#171717", "#737373", "#F4F4F0"],
       });
 
       onMintSuccess(tokenId);
@@ -281,32 +289,30 @@ export const MintStudio: React.FC<MintStudioProps> = ({
     <div className="max-w-5xl mx-auto space-y-8">
       {/* Studio Header */}
       <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-semibold tracking-wide uppercase">
-          <Sparkles className="w-3.5 h-3.5" />
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FAFAF8] border border-[#EAEAEA] text-[#737373] text-xs font-semibold tracking-wide uppercase">
+          <Sparkles className="w-3.5 h-3.5 text-[#E84B55]" />
           Web3 Creator Studio
         </div>
-        <h1 className="text-3xl sm:text-5xl font-extrabold text-white font-sans tracking-tight">
-          Create & Mint <span className="gradient-text">Masterpieces</span>
+        <h1 className="text-3xl sm:text-5xl font-extrabold text-[#171717] tracking-tight">
+          Create & Mint Your NFT
         </h1>
-        <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-          Upload or generate your artwork, pin standard ERC-721 metadata securely to IPFS, and mint
-          directly onto Ethereum Sepolia.
+        <p className="text-sm text-[#737373] max-w-2xl mx-auto leading-relaxed">
+          Upload or algorithmically generate your artwork, pin standard ERC-721 metadata securely to IPFS, and mint directly onto Ethereum Sepolia.
         </p>
       </div>
 
       {/* Contract Warning Banner if Not Configured */}
       {!contractAddress && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center justify-between gap-4">
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
-            <div className="text-sm">
-              <span className="font-semibold">Notice:</span> No EtherCanvasNFT contract address is
-              configured. Please set one or deploy to Sepolia.
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <div className="text-sm font-medium">
+              <span>Notice:</span> No EtherCanvasNFT contract address configured.
             </div>
           </div>
           <button
             onClick={onOpenSettings}
-            className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-semibold whitespace-nowrap"
+            className="px-4 py-2 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-semibold whitespace-nowrap"
           >
             Configure Contract
           </button>
@@ -315,18 +321,17 @@ export const MintStudio: React.FC<MintStudioProps> = ({
 
       {/* Success Modal / State */}
       {status === "success" && (
-        <div className="glass-panel rounded-3xl p-8 border border-emerald-500/40 text-center space-y-6 animate-in zoom-in-95">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/40">
+        <div className="bg-white border border-[#EAEAEA] rounded-3xl p-8 sm:p-12 text-center space-y-6 shadow-card animate-in zoom-in-95">
+          <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
             <CheckCircle2 className="w-8 h-8" />
           </div>
 
           <div>
-            <h2 className="text-2xl font-bold text-white font-sans">
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#171717]">
               Minting Successful!
             </h2>
-            <p className="text-sm text-slate-300 mt-1">
-              Token ID <strong className="text-violet-400">#{mintedTokenId}</strong> is now
-              immutably recorded on Ethereum Sepolia.
+            <p className="text-sm text-[#737373] mt-1.5">
+              Token ID <strong className="text-[#E84B55]">#{mintedTokenId}</strong> is now immutably recorded on Ethereum Sepolia.
             </p>
           </div>
 
@@ -337,10 +342,10 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                 href={`https://sepolia.etherscan.io/tx/${txHash}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-between p-3 rounded-xl bg-canvas-900 border border-violet-900/40 text-slate-300 hover:text-violet-300 transition-colors"
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-[#FAFAF8] border border-[#EAEAEA] text-[#171717] hover:border-[#D4D4D4] transition-colors"
               >
-                <span>View Transaction on Etherscan</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <span>View on Sepolia Etherscan</span>
+                <ExternalLink className="w-3.5 h-3.5 text-[#737373]" />
               </a>
             )}
 
@@ -349,18 +354,18 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                 href={formatIpfsUrl(metadataIpfsUri)}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-between p-3 rounded-xl bg-canvas-900 border border-violet-900/40 text-slate-300 hover:text-violet-300 transition-colors"
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-[#FAFAF8] border border-[#EAEAEA] text-[#171717] hover:border-[#D4D4D4] transition-colors"
               >
-                <span>View Metadata on IPFS Gateway</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <span>View Metadata on IPFS</span>
+                <ExternalLink className="w-3.5 h-3.5 text-[#737373]" />
               </a>
             )}
           </div>
 
-          <div className="flex justify-center gap-4 pt-2">
+          <div className="flex justify-center gap-3 pt-2">
             <button
               onClick={resetForm}
-              className="px-6 py-2.5 rounded-xl bg-canvas-900 hover:bg-violet-950/60 border border-violet-900/50 text-slate-200 text-sm font-semibold transition-all"
+              className="px-6 py-2.5 rounded-full bg-[#171717] hover:bg-[#262626] text-white text-xs sm:text-sm font-semibold transition-all shadow-sm"
             >
               Mint Another NFT
             </button>
@@ -371,21 +376,21 @@ export const MintStudio: React.FC<MintStudioProps> = ({
       {/* Main Studio Grid */}
       {status !== "success" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column: Image Canvas & Art Generation (5 cols) */}
+          {/* Left Column: Artwork Canvas & Generator (5 cols) */}
           <div className="lg:col-span-5 space-y-4">
-            <div className="glass-panel rounded-3xl p-6 space-y-5">
+            <div className="bg-white border border-[#EAEAEA] rounded-3xl p-6 sm:p-7 space-y-5 shadow-card">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-white flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-violet-400" />
+                <span className="text-sm font-bold text-[#171717] flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-[#E84B55]" />
                   Artwork Canvas
                 </span>
                 <button
                   type="button"
                   onClick={generateProceduralArt}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/30 text-violet-300 text-xs font-semibold transition-all"
-                  title="Generate neon algorithmic canvas art"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FAFAF8] hover:bg-[#F4F4F0] border border-[#EAEAEA] hover:border-[#D4D4D4] text-[#171717] text-xs font-semibold transition-all"
+                  title="Generate algorithmic canvas art without uploading files"
                 >
-                  <Wand2 className="w-3.5 h-3.5" />
+                  <Wand2 className="w-3.5 h-3.5 text-[#E84B55]" />
                   Procedural Art
                 </button>
               </div>
@@ -395,8 +400,8 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 className={`relative group aspect-square rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-4 cursor-pointer overflow-hidden ${
                   imagePreview
-                    ? "border-violet-500/50 bg-canvas-900/60"
-                    : "border-violet-900/40 hover:border-violet-500/40 bg-canvas-900/30 hover:bg-canvas-900/60"
+                    ? "border-[#EAEAEA] bg-[#FAFAF8]"
+                    : "border-[#EAEAEA] hover:border-[#171717] bg-[#FAFAF8] hover:bg-[#F4F4F0]"
                 }`}
               >
                 {imagePreview ? (
@@ -404,24 +409,24 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                     <img
                       src={imagePreview}
                       alt="Artwork Preview"
-                      className="w-full h-full object-cover rounded-xl shadow-lg"
+                      className="w-full h-full object-cover rounded-xl shadow-sm"
                     />
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
-                      <span className="text-xs font-semibold text-white bg-violet-600 px-3 py-1.5 rounded-lg shadow">
-                        Change Image
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
+                      <span className="text-xs font-semibold text-[#171717] bg-white px-3.5 py-2 rounded-full shadow-lg">
+                        Change Artwork
                       </span>
                     </div>
                   </>
                 ) : (
                   <div className="text-center space-y-3 p-4">
-                    <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
-                      <Upload className="w-7 h-7" />
+                    <div className="w-14 h-14 rounded-full bg-white border border-[#EAEAEA] text-[#737373] flex items-center justify-center mx-auto group-hover:scale-105 transition-transform shadow-sm">
+                      <Upload className="w-6 h-6" />
                     </div>
                     <div>
-                      <div className="text-sm font-semibold text-slate-200">
+                      <div className="text-sm font-semibold text-[#171717]">
                         Click to select image
                       </div>
-                      <div className="text-xs text-slate-400 mt-1">
+                      <div className="text-xs text-[#737373] mt-1">
                         PNG, JPG, SVG, WebP up to 5MB
                       </div>
                     </div>
@@ -437,12 +442,11 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                 />
               </div>
 
-              {/* Security Badge */}
-              <div className="p-3.5 rounded-2xl bg-canvas-900/80 border border-violet-900/40 text-xs text-slate-400 flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>
-                  <strong>Serverless Pinata IPFS:</strong> Uploads run via secure server routes.
-                  Your Pinata API credentials are never exposed in browser bundles.
+              {/* Serverless IPFS Security Assurance */}
+              <div className="p-3.5 rounded-2xl bg-[#FAFAF8] border border-[#EAEAEA] text-xs text-[#737373] flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <span className="leading-relaxed">
+                  <strong className="text-[#171717]">Serverless Pinata IPFS:</strong> Uploads execute securely via server routes. Your Pinata API keys are never exposed.
                 </span>
               </div>
             </div>
@@ -450,29 +454,29 @@ export const MintStudio: React.FC<MintStudioProps> = ({
 
           {/* Right Column: Metadata Form (7 cols) */}
           <div className="lg:col-span-7 space-y-5">
-            <div className="glass-panel rounded-3xl p-6 sm:p-8 space-y-5">
-              <h2 className="text-lg font-bold text-white font-sans flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-violet-400" />
+            <div className="bg-white border border-[#EAEAEA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-card">
+              <h2 className="text-lg font-bold text-[#171717] flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#E84B55]" />
                 NFT Metadata & Attributes
               </h2>
 
               {/* Title & Description */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider mb-2">
                     Artwork Title *
                   </label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Celestial Ether #1"
-                    className="w-full px-4 py-3 rounded-xl bg-canvas-900 border border-violet-900/40 focus:border-violet-500 focus:outline-none text-white text-sm placeholder:text-slate-500"
+                    placeholder="e.g. Celestial Harmony #1"
+                    className="w-full px-4 py-3 rounded-xl bg-[#FAFAF8] border border-[#EAEAEA] focus:border-[#171717] focus:bg-white focus:outline-none text-[#171717] text-sm placeholder:text-[#A3A3A3] transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider mb-2">
                     Description
                   </label>
                   <textarea
@@ -480,12 +484,12 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Describe your artwork, medium, symbolism or narrative..."
-                    className="w-full px-4 py-3 rounded-xl bg-canvas-900 border border-violet-900/40 focus:border-violet-500 focus:outline-none text-white text-sm placeholder:text-slate-500 resize-none"
+                    className="w-full px-4 py-3 rounded-xl bg-[#FAFAF8] border border-[#EAEAEA] focus:border-[#171717] focus:bg-white focus:outline-none text-[#171717] text-sm placeholder:text-[#A3A3A3] transition-all resize-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider mb-2">
                     Recipient Address (Optional)
                   </label>
                   <input
@@ -493,7 +497,7 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
                     placeholder={address || "0x... (defaults to connected wallet)"}
-                    className="w-full px-4 py-3 rounded-xl bg-canvas-900 border border-violet-900/40 focus:border-violet-500 focus:outline-none text-white font-mono text-sm placeholder:text-slate-500"
+                    className="w-full px-4 py-3 rounded-xl bg-[#FAFAF8] border border-[#EAEAEA] focus:border-[#171717] focus:bg-white focus:outline-none text-[#171717] font-mono text-sm placeholder:text-[#A3A3A3] transition-all"
                   />
                 </div>
               </div>
@@ -501,13 +505,13 @@ export const MintStudio: React.FC<MintStudioProps> = ({
               {/* Traits / Attributes Section */}
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  <label className="text-xs font-semibold text-[#737373] uppercase tracking-wider">
                     Traits & Properties
                   </label>
                   <button
                     type="button"
                     onClick={addTrait}
-                    className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 font-semibold"
+                    className="flex items-center gap-1 text-xs text-[#E84B55] hover:text-[#D73843] font-semibold"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add Trait
@@ -522,19 +526,19 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                         placeholder="Trait Type (e.g. Rarity)"
                         value={attr.trait_type}
                         onChange={(e) => updateTrait(idx, "trait_type", e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-lg bg-canvas-900 border border-violet-900/30 text-white text-xs placeholder:text-slate-500"
+                        className="flex-1 px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#EAEAEA] text-[#171717] text-xs placeholder:text-[#A3A3A3] focus:bg-white focus:border-[#171717] focus:outline-none"
                       />
                       <input
                         type="text"
                         placeholder="Value (e.g. Legendary)"
                         value={attr.value}
                         onChange={(e) => updateTrait(idx, "value", e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-lg bg-canvas-900 border border-violet-900/30 text-white text-xs placeholder:text-slate-500"
+                        className="flex-1 px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#EAEAEA] text-[#171717] text-xs placeholder:text-[#A3A3A3] focus:bg-white focus:border-[#171717] focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => removeTrait(idx)}
-                        className="p-2 text-slate-500 hover:text-rose-400 transition-colors"
+                        className="p-2 text-[#A3A3A3] hover:text-rose-600 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -543,19 +547,82 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                 </div>
               </div>
 
+              {/* MetaMask Installation Guidance */}
+              {!address && !hasProvider && (
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600 mt-0.5" />
+                  <div className="space-y-2 flex-1">
+                    <div className="font-semibold text-amber-900 text-sm">
+                      MetaMask Not Detected
+                    </div>
+                    <p className="text-amber-800/90 leading-relaxed">
+                      To mint NFTs on EtherCanvas, you need the MetaMask browser extension. Please install MetaMask to interact with Ethereum Sepolia.
+                    </p>
+                    <div>
+                      <a
+                        href="https://metamask.io/download/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-semibold transition-colors"
+                      >
+                        <span>Install MetaMask Extension</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Error Display */}
-              {errorMessage && (
-                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400 mt-0.5" />
-                  <div>{errorMessage}</div>
+              {(errorMessage || walletError) && (
+                <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600 mt-0.5" />
+                  <div className="flex-1 space-y-1.5">
+                    <div>{errorMessage || walletError}</div>
+                    {!hasProvider ? (
+                      <div>
+                        <a
+                          href="https://metamask.io/download/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 text-xs font-medium transition-colors"
+                        >
+                          <span>Get MetaMask</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    ) : walletError ? (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={connectWallet}
+                          disabled={isConnecting}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-[#171717] border border-[#EAEAEA] text-xs font-medium transition-colors shadow-sm"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Retry Connection</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {walletError && (
+                    <button
+                      type="button"
+                      onClick={() => clearWalletError()}
+                      className="text-rose-600 hover:text-rose-800 text-xs px-1 font-bold"
+                      title="Dismiss"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               )}
 
               {/* Status Indicator */}
               {status !== "idle" && status !== "error" && (
-                <div className="p-4 rounded-2xl bg-violet-950/60 border border-violet-800/40 text-violet-200 text-xs flex items-center gap-3">
-                  <Loader2 className="w-4 h-4 animate-spin text-violet-400 flex-shrink-0" />
-                  <span>{statusMessage}</span>
+                <div className="p-4 rounded-2xl bg-[#FAFAF8] border border-[#EAEAEA] text-[#171717] text-xs flex items-center gap-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#E84B55] flex-shrink-0" />
+                  <span className="font-medium">{statusMessage}</span>
                 </div>
               )}
 
@@ -563,16 +630,27 @@ export const MintStudio: React.FC<MintStudioProps> = ({
               <div className="pt-2">
                 {!address ? (
                   <button
+                    type="button"
                     onClick={connectWallet}
-                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-xl shadow-violet-900/40 transition-all active:scale-98"
+                    disabled={isConnecting}
+                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-[#171717] hover:bg-[#262626] text-white font-semibold text-sm shadow-sm transition-all active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <Coins className="w-4 h-4" />
-                    Connect MetaMask to Mint
+                    {isConnecting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Connecting to MetaMask...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Coins className="w-4 h-4" />
+                        <span>{hasProvider ? "Connect MetaMask to Mint" : "Connect MetaMask (Install Required)"}</span>
+                      </>
+                    )}
                   </button>
                 ) : !isSepolia ? (
                   <button
                     onClick={switchToSepolia}
-                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold text-sm transition-all animate-pulse"
+                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-sm transition-all animate-pulse"
                   >
                     <AlertCircle className="w-4 h-4" />
                     Switch Network to Sepolia
@@ -581,7 +659,7 @@ export const MintStudio: React.FC<MintStudioProps> = ({
                   <button
                     onClick={handleMint}
                     disabled={status === "uploading_ipfs" || status === "awaiting_wallet" || status === "confirming_tx"}
-                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-violet-900/40 hover:shadow-violet-700/60 transition-all border border-violet-400/30 active:scale-98 disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-[#E84B55] hover:bg-[#D73843] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-98 disabled:opacity-50"
                   >
                     {status === "uploading_ipfs" ? (
                       <>
