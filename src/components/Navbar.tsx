@@ -16,11 +16,13 @@ import {
   ExternalLink,
   Loader2,
   Plus,
+  Zap,
+  Bell,
 } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
 import { useChainlinkPrice } from "@/hooks/useChainlinkPrice";
 
-export type NavTab = "explore" | "create" | "my_nfts" | "ens" | "oracle";
+export type NavTab = "explore" | "create" | "batch_mint" | "alerts" | "my_nfts" | "ens" | "oracle";
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -70,8 +72,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navItems: { id: NavTab; label: string; icon: React.ElementType }[] = [
     { id: "explore", label: "Explore", icon: Compass },
     { id: "create", label: "Create", icon: Plus },
+    { id: "batch_mint", label: "Batch Mint", icon: Zap },
+    { id: "alerts", label: "Live Alerts", icon: Bell },
     { id: "my_nfts", label: "My NFTs", icon: Layers },
-    { id: "ens", label: "ENS Lookup", icon: Search },
+    { id: "ens", label: "ENS", icon: Search },
   ];
 
   return (
@@ -119,7 +123,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   <Icon
                     className={`w-3.5 h-3.5 ${
-                      isActive ? "text-white" : item.id === "create" ? "text-[#E84B55]" : "text-[#737373]"
+                      isActive
+                        ? "text-white"
+                        : item.id === "create" || item.id === "batch_mint"
+                        ? "text-[#E84B55]"
+                        : item.id === "alerts"
+                        ? "text-[#10B981]"
+                        : "text-[#737373]"
                     }`}
                   />
                   {item.label}

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { Navbar, NavTab } from "@/components/Navbar";
 import { MintStudio } from "@/components/MintStudio";
+import { SmartAccountBatchMint } from "@/components/SmartAccountBatchMint";
+import { LiveAlerts } from "@/components/LiveAlerts";
 import { Gallery } from "@/components/Gallery";
 import { EnsLookup } from "@/components/EnsLookup";
 import { PriceFeedCard } from "@/components/PriceFeedCard";
@@ -82,6 +84,22 @@ export function App() {
             />
           )}
 
+          {activeTab === "batch_mint" && (
+            <SmartAccountBatchMint
+              contractAddress={contractAddress}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onNavigateToExplore={() => setActiveTab("explore")}
+            />
+          )}
+
+          {activeTab === "alerts" && (
+            <LiveAlerts
+              contractAddress={contractAddress}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onNavigateToStudio={() => setActiveTab("create")}
+            />
+          )}
+
           {activeTab === "ens" && <EnsLookup />}
 
           {activeTab === "oracle" && <PriceFeedCard />}
@@ -134,6 +152,12 @@ export function App() {
               </span>
               <span className="px-2.5 py-1 rounded-full bg-[#FAFAF8] border border-[#EAEAEA]">
                 ENS
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-[#FAFAF8] border border-[#EAEAEA] text-[#E84B55] font-semibold">
+                Pimlico ERC-4337
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-[#FAFAF8] border border-[#EAEAEA] text-[#10B981] font-semibold">
+                Live Alerts
               </span>
             </div>
 

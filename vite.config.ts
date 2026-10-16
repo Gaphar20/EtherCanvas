@@ -174,9 +174,137 @@ function localUploadApiPlugin() {
   };
 }
 
+// Local dev server middleware for /api/pimlico to match Vercel Serverless Function locally
+function localPimlicoApiPlugin() {
+  const ALLOWED_METHODS = new Set([
+    "eth_sendUserOperation",
+    "eth_estimateUserOperationGas",
+    "eth_getUserOperationByHash",
+    "eth_getUserOperationReceipt",
+    "eth_supportedEntryPoints",
+    "eth_chainId",
+    "pm_sponsorUserOperation",
+    "pm_getPaymasterData",
+    "pm_getPaymasterStubData",
+    "pimlico_getUserOperationGasPrice",
+    "pimlico_getUserOperationStatus",
+  ]);
+
+  return {
+    name: "local-pimlico-api",
+    configureServer(server: any) {
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        if (req.url === "/api/pimlico" && req.method === "POST") {
+          let rawBody = "";
+          req.on("data", (chunk: any) => {
+            rawBody += chunk;
+          });
+
+          req.on("end", async () => {
+            res.setHeader("Content-Type", "application/json");
+
+            const pimlicoApiKey = process.env.PIMLICO_API_KEY?.trim();
+            if (!pimlicoApiKey) {
+              res.statusCode = 500;
+              res.end(
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: null,
+                  error: {
+                    code: -32000,
+                    message:
+                      "PIMLICO_API_KEY is not configured on the server. Please add PIMLICO_API_KEY to your .env file.",
+                    data: { code: "MISSING_PIMLICO_API_KEY" },
+                  },
+                })
+              );
+              return;
+            }
+
+            let body: any;
+            try {
+              body = JSON.parse(rawBody || "{}");
+            } catch {
+              res.statusCode = 400;
+              res.end(
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: null,
+                  error: {
+                    code: -32700,
+                    message: "Parse error. Invalid JSON payload.",
+                  },
+                })
+              );
+              return;
+            }
+
+            const requests = Array.isArray(body) ? body : [body];
+            for (const rpcReq of requests) {
+              const method = rpcReq?.method;
+              if (!method || !ALLOWED_METHODS.has(method)) {
+                res.statusCode = 403;
+                res.end(
+                  JSON.stringify({
+                    jsonrpc: "2.0",
+                    id: rpcReq?.id ?? null,
+                    error: {
+                      code: -32601,
+                      message: `Method '${method}' is not allowed by the local EtherCanvas Pimlico proxy.`,
+                    },
+                  })
+                );
+                return;
+              }
+            }
+
+            try {
+              const pimlicoSepoliaUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${pimlicoApiKey}`;
+              const upstreamResponse = await fetch(pimlicoSepoliaUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              });
+
+              const responseData = await upstreamResponse.json().catch(async () => {
+                const text = await upstreamResponse.text();
+                return {
+                  jsonrpc: "2.0",
+                  id: Array.isArray(body) ? null : requests[0]?.id ?? null,
+                  error: {
+                    code: -32603,
+                    message: `Upstream Pimlico returned non-JSON (${upstreamResponse.status}): ${text}`,
+                  },
+                };
+              });
+
+              res.statusCode = upstreamResponse.status;
+              res.end(JSON.stringify(responseData));
+            } catch (err: any) {
+              res.statusCode = 502;
+              res.end(
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: Array.isArray(body) ? null : requests[0]?.id ?? null,
+                  error: {
+                    code: -32603,
+                    message: `Failed to proxy Pimlico request locally: ${err.message || err}`,
+                  },
+                })
+              );
+            }
+          });
+        } else {
+          next();
+        }
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), localUploadApiPlugin()],
+  plugins: [react(), localUploadApiPlugin(), localPimlicoApiPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

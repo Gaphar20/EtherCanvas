@@ -64,6 +64,19 @@ describe("EtherCanvasNFT", function () {
       expect(await etherCanvasNFT.tokenURI(2n)).to.equal(sampleUri2);
     });
 
+    it("Should support two sequential mint calls in succession for smart account batching", async function () {
+      const tx1 = await etherCanvasNFT.connect(artist).mint(artist.address, sampleUri1);
+      await tx1.wait();
+      const tx2 = await etherCanvasNFT.connect(artist).mint(collector.address, sampleUri2);
+      await tx2.wait();
+
+      expect(await etherCanvasNFT.totalMinted()).to.equal(2n);
+      expect(await etherCanvasNFT.ownerOf(1n)).to.equal(artist.address);
+      expect(await etherCanvasNFT.ownerOf(2n)).to.equal(collector.address);
+      expect(await etherCanvasNFT.tokenURI(1n)).to.equal(sampleUri1);
+      expect(await etherCanvasNFT.tokenURI(2n)).to.equal(sampleUri2);
+    });
+
     it("Should emit the Minted event with correct indexed args and URI", async function () {
       await expect(etherCanvasNFT.connect(artist).mint(collector.address, sampleUri1))
         .to.emit(etherCanvasNFT, "Minted")

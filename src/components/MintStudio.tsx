@@ -229,8 +229,9 @@ export const MintStudio: React.FC<MintStudioProps> = ({
         signer
       );
 
-      // Call mintNFT(recipient, tokenURI)
-      const tx = await contract.mintNFT(mintTarget, ipfsMetadataUri);
+      // Call mint(recipient, tokenURI)
+      const mintFn = typeof contract.mint === "function" ? contract.mint.bind(contract) : (contract as any).mintNFT.bind(contract);
+      const tx = await mintFn(mintTarget, ipfsMetadataUri);
       setTxHash(tx.hash);
 
       setStatus("confirming_tx");
