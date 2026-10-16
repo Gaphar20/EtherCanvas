@@ -183,6 +183,7 @@ function localPimlicoApiPlugin() {
     "eth_getUserOperationReceipt",
     "eth_supportedEntryPoints",
     "eth_chainId",
+    "eth_blockNumber",
     "pm_sponsorUserOperation",
     "pm_getPaymasterData",
     "pm_getPaymasterStubData",

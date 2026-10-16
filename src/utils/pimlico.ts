@@ -1,7 +1,5 @@
 import {
   createPublicClient,
-  createWalletClient,
-  custom,
   http,
   encodeFunctionData,
   formatEther,
@@ -10,7 +8,7 @@ import {
 import { sepolia } from "viem/chains";
 import { entryPoint07Address } from "viem/account-abstraction";
 import { createPimlicoClient } from "permissionless/clients/pimlico";
-import { createSmartAccountClient } from "permissionless";
+import { createSmartAccountClient, toOwner } from "permissionless";
 import { toSimpleSmartAccount } from "permissionless/accounts";
 import { ethers } from "ethers";
 import { ETHERCANVAS_NFT_ABI, SEPOLIA_CONFIG } from "@/contracts/addresses";
@@ -53,24 +51,24 @@ export async function getSimpleSmartAccountInstance(
     throw new Error("Connected wallet provider and owner address are required.");
   }
 
-  // Create viem wallet client wrapping the injected EIP-1193 provider
-  const walletClient = createWalletClient({
-    account: ownerAddress as Address,
-    chain: sepolia,
-    transport: custom(provider),
+  // Convert provider to a local owner using permissionless toOwner with the known ownerAddress.
+  // This avoids unprompted background eth_requestAccounts calls during useEffect.
+  const owner = await toOwner({
+    owner: provider,
+    address: ownerAddress as Address,
   });
 
   // SimpleAccount with EntryPoint v0.7
   const simpleAccount = await toSimpleSmartAccount({
     client: publicClient,
-    owner: walletClient,
+    owner,
     entryPoint: {
       address: entryPoint07Address,
       version: "0.7",
     },
   });
 
-  return { simpleAccount, walletClient };
+  return { simpleAccount, owner };
 }
 
 /**
@@ -202,6 +200,7 @@ export async function executeSmartAccountBatchMint({
   const smartAccountClient = createSmartAccountClient({
     account: simpleAccount,
     chain: sepolia,
+    client: publicClient,
     bundlerTransport: http(getPimlicoRpcUrl()),
     paymaster: sponsor ? pimlicoClient : undefined,
     userOperation: {
@@ -230,32 +229,41 @@ export async function executeSmartAccountBatchMint({
       calls,
     });
   } catch (err: any) {
-    const errMsg = err?.message || String(err);
+    const errStr = `${err?.shortMessage || ""} ${err?.message || ""} ${err?.details || ""} ${JSON.stringify(err?.cause || "")}`;
 
     // Handle user rejection
     if (
-      errMsg.includes("User rejected") ||
-      errMsg.includes("User denied") ||
+      errStr.includes("User rejected") ||
+      errStr.includes("User denied") ||
+      errStr.includes("rejected the request") ||
       err?.code === 4001
     ) {
       throw new Error("UserOperation signature was rejected in your wallet.");
     }
 
-    // Handle Paymaster sponsorship rejection
-    if (errMsg.includes("paymaster") || errMsg.includes("sponsor") || errMsg.includes("policy")) {
-      throw new Error(
-        `Pimlico Paymaster rejected sponsorship: ${errMsg}. You can switch to Self-Funded mode to execute using your Smart Account ETH balance.`
-      );
-    }
-
     // Handle missing API key proxy error
-    if (errMsg.includes("MISSING_PIMLICO_API_KEY") || errMsg.includes("PIMLICO_API_KEY is not configured")) {
+    if (
+      errStr.includes("MISSING_PIMLICO_API_KEY") ||
+      errStr.includes("PIMLICO_API_KEY is not configured")
+    ) {
       throw new Error(
-        "PIMLICO_API_KEY is not configured on the server. Please add PIMLICO_API_KEY to your .env or Vercel Environment Variables."
+        "PIMLICO_API_KEY is not configured on the server. For Vercel deployments, configure PIMLICO_API_KEY in Vercel project environment variables. For local testing, add PIMLICO_API_KEY to your local .env file."
       );
     }
 
-    throw new Error(`Failed to submit UserOperation: ${errMsg}`);
+    // Handle Paymaster sponsorship rejection
+    if (
+      errStr.toLowerCase().includes("paymaster") ||
+      errStr.toLowerCase().includes("sponsor") ||
+      errStr.toLowerCase().includes("policy") ||
+      errStr.toLowerCase().includes("precheck failed")
+    ) {
+      throw new Error(
+        `Pimlico Paymaster rejected gas sponsorship: ${err?.shortMessage || err?.message || "Policy check failed"}. You can switch to Self-Funded mode to execute using your Smart Account ETH balance.`
+      );
+    }
+
+    throw new Error(`Failed to submit UserOperation: ${err?.shortMessage || err?.message || String(err)}`);
   }
 
   // Wait for UserOperation to be bundled and mined on Sepolia

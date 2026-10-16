@@ -19,6 +19,7 @@ const ALLOWED_METHODS = new Set<string>([
   "eth_getUserOperationReceipt",
   "eth_supportedEntryPoints",
   "eth_chainId",
+  "eth_blockNumber",
 
   // Pimlico Paymaster Methods (ERC-4337 v0.7 and v0.6)
   "pm_sponsorUserOperation",

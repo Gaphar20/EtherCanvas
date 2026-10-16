@@ -20,7 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { useWallet } from "@/hooks/useWallet";
+import { useWallet, getEthereumProvider } from "@/hooks/useWallet";
 import {
   resolveSmartAccountAddress,
   getSmartAccountBalance,
@@ -197,7 +197,7 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
 
       setIsLoadingAccount(true);
       try {
-        const provider = (window as any).ethereum;
+        const provider = getEthereumProvider() || (window as any).ethereum;
         if (!provider) return;
 
         const saAddr = await resolveSmartAccountAddress(address, provider);
@@ -237,36 +237,46 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
     item: BatchMintItemConfig,
     slotNumber: number
   ): Promise<string> => {
-    if (item.metadataUri && item.metadataUri.startsWith("ipfs://")) {
-      return item.metadataUri;
+    if (item.metadataUri && item.metadataUri.trim().startsWith("ipfs://")) {
+      return item.metadataUri.trim();
     }
 
     setStatusMessage(`Uploading NFT #${slotNumber} artwork and metadata to IPFS...`);
 
-    const formData = new FormData();
-    if (item.imageFile) {
-      formData.append("file", item.imageFile);
-    } else if (item.imagePreview) {
-      const res = await fetch(item.imagePreview);
-      const blob = await res.blob();
-      formData.append("file", blob, `batch-nft-${slotNumber}.png`);
-    } else {
+    let imageBase64 = item.imagePreview;
+    if (item.imageFile && (!imageBase64 || !imageBase64.startsWith("data:"))) {
+      imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(item.imageFile!);
+      });
+    }
+
+    if (!imageBase64) {
       throw new Error(`Artwork for NFT #${slotNumber} is required.`);
     }
 
-    formData.append("name", item.name.trim() || `EtherCanvas Batch #${slotNumber}`);
-    formData.append("description", item.description.trim());
-    formData.append("attributes", JSON.stringify(item.attributes));
+    const payload = {
+      image: imageBase64,
+      fileName: `batch-nft-${slotNumber}.png`,
+      name: item.name.trim() || `EtherCanvas Batch #${slotNumber}`,
+      description: item.description.trim(),
+      attributes: item.attributes,
+    };
 
     const response = await fetch("/api/upload", {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
       const errJson = await response.json().catch(() => ({}));
       throw new Error(
-        errJson.error || `IPFS upload failed for NFT #${slotNumber} with status ${response.status}`
+        errJson.error || errJson.details || `IPFS upload failed for NFT #${slotNumber} with status ${response.status}`
       );
     }
 
@@ -280,17 +290,26 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
     setUserOpResult(null);
 
     if (!address) {
-      setErrorMessage("Please connect your MetaMask wallet first.");
+      const msg = "Please connect your MetaMask wallet first.";
+      setErrorMessage(msg);
+      setStatus("error");
+      console.warn("[SmartAccountBatchMint]", msg);
       return;
     }
 
     if (!isSepolia) {
-      setErrorMessage("Please switch your network to Ethereum Sepolia (Chain ID 11155111).");
+      const msg = "Please switch your network to Ethereum Sepolia (Chain ID 11155111).";
+      setErrorMessage(msg);
+      setStatus("error");
+      console.warn("[SmartAccountBatchMint]", msg);
       return;
     }
 
     if (!contractAddress || !ethers.isAddress(contractAddress)) {
-      setErrorMessage("Please configure a valid deployed EtherCanvas contract address in Settings.");
+      const msg = "Please configure a valid deployed EtherCanvas contract address in Settings.";
+      setErrorMessage(msg);
+      setStatus("error");
+      console.warn("[SmartAccountBatchMint]", msg);
       return;
     }
 
@@ -298,11 +317,17 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
     const recipient2 = (nft2.recipient.trim() || smartAccountAddress || address).toLowerCase();
 
     if (!ethers.isAddress(recipient1)) {
-      setErrorMessage("Recipient address for NFT #1 is not a valid Ethereum address.");
+      const msg = "Recipient address for NFT #1 is not a valid Ethereum address.";
+      setErrorMessage(msg);
+      setStatus("error");
+      console.warn("[SmartAccountBatchMint]", msg);
       return;
     }
     if (!ethers.isAddress(recipient2)) {
-      setErrorMessage("Recipient address for NFT #2 is not a valid Ethereum address.");
+      const msg = "Recipient address for NFT #2 is not a valid Ethereum address.";
+      setErrorMessage(msg);
+      setStatus("error");
+      console.warn("[SmartAccountBatchMint]", msg);
       return;
     }
 
@@ -317,7 +342,15 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
 
       // Step 2: Prepare & execute single UserOperation with 2 calls
       setStatus("connecting_smart_account");
-      const provider = (window as any).ethereum;
+      setStatusMessage("Preparing batched UserOperation for 2 NFT mints...");
+      const provider = getEthereumProvider() || (window as any).ethereum;
+      if (!provider) {
+        const msg = "No supported Ethereum wallet detected. Please ensure MetaMask is installed.";
+        setErrorMessage(msg);
+        setStatus("error");
+        console.warn("[SmartAccountBatchMint]", msg);
+        return;
+      }
 
       const result = await executeSmartAccountBatchMint({
         ownerAddress: address,
@@ -361,9 +394,10 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
         );
       }
     } catch (err: any) {
-      console.error("Batch mint failure:", err);
+      console.error("[SmartAccountBatchMint] Batch mint failure:", err);
       setStatus("error");
       setErrorMessage(err.message || "Failed to execute batched UserOperation.");
+      setStatusMessage("");
     }
   };
 
@@ -859,34 +893,54 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
           </div>
         )}
 
-        {/* Status Message / Progress */}
-        {status !== "idle" && (
+        {/* Status Message / Progress Banner */}
+        {(status !== "idle" || !!errorMessage) && (
           <div
-            className={`p-4 rounded-2xl border text-xs flex items-center gap-3 ${
+            className={`p-4 rounded-2xl border text-xs flex items-center justify-between gap-3 ${
               status === "success"
                 ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                : status === "error"
+                : status === "error" || errorMessage
                 ? "bg-red-50 border-red-200 text-red-800"
                 : "bg-blue-50 border-blue-200 text-blue-800"
             }`}
           >
-            {status === "uploading_ipfs" ||
-            status === "connecting_smart_account" ||
-            status === "awaiting_signature" ||
-            status === "confirming_userop" ? (
-              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-            ) : status === "success" ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              {status === "uploading_ipfs" ||
+              status === "connecting_smart_account" ||
+              status === "awaiting_signature" ||
+              status === "confirming_userop" ? (
+                <Loader2 className="w-4 h-4 animate-spin shrink-0 text-blue-600" />
+              ) : status === "success" ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              )}
+              <div className="flex-1 font-medium break-words">
+                {status === "error" || errorMessage
+                  ? errorMessage || statusMessage
+                  : statusMessage || errorMessage}
+              </div>
+            </div>
+            {(status === "error" || !!errorMessage) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatus("idle");
+                  setErrorMessage(null);
+                  setStatusMessage("");
+                }}
+                className="text-xs text-red-700 hover:text-red-900 underline ml-2 shrink-0 font-semibold"
+              >
+                Dismiss
+              </button>
             )}
-            <div className="flex-1 font-medium">{statusMessage || errorMessage}</div>
           </div>
         )}
 
         {/* Action Button */}
         {!address ? (
           <button
+            type="button"
             onClick={connectWallet}
             disabled={isConnecting}
             className="w-full py-4 rounded-2xl bg-[#171717] hover:bg-[#262626] text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
@@ -896,6 +950,7 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
           </button>
         ) : !isSepolia ? (
           <button
+            type="button"
             onClick={switchToSepolia}
             className="w-full py-4 rounded-2xl bg-[#E84B55] hover:bg-[#d33842] text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
           >
@@ -903,6 +958,7 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
           </button>
         ) : (
           <button
+            type="button"
             onClick={handleBatchMint}
             disabled={status !== "idle" && status !== "success" && status !== "error"}
             className="w-full py-4 rounded-2xl bg-[#171717] hover:bg-[#262626] disabled:bg-[#D4D4D4] text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-sm"
@@ -911,6 +967,11 @@ export const SmartAccountBatchMint: React.FC<SmartAccountBatchMintProps> = ({
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Uploading Both Artworks to IPFS...</span>
+              </>
+            ) : status === "connecting_smart_account" ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Preparing Batched UserOperation...</span>
               </>
             ) : status === "awaiting_signature" ? (
               <>
